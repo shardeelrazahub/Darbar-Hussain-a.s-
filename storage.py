@@ -66,8 +66,15 @@ def save_uploaded_file(file, folder="uploads"):
 
     # 2. Local Fallback (if Supabase network is unreachable)
     filename = f"{uuid.uuid4().hex}.{ext}"
-    upload_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-    os.makedirs(upload_folder, exist_ok=True)
+    if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+        upload_folder = '/tmp/uploads'
+    else:
+        upload_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+    try:
+        os.makedirs(upload_folder, exist_ok=True)
+    except Exception:
+        upload_folder = '/tmp/uploads'
+        os.makedirs(upload_folder, exist_ok=True)
     filepath = os.path.join(upload_folder, filename)
     with open(filepath, 'wb') as f:
         f.write(file_bytes)

@@ -24,6 +24,8 @@ def _load_env_file():
 
 _load_env_file()
 
+import shutil
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and '[YOUR-PASSWORD]' in DATABASE_URL:
     DATABASE_URL = None
@@ -40,14 +42,30 @@ else:
     import sqlite3
     DB_TYPE = 'sqlite'
 
-_local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
+_is_serverless = bool(os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'))
+_bundled_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
 _tmp_db   = '/tmp/database.db'
-try:
-    with open(_local_db, 'ab'):
-        pass
-    DB_PATH = _local_db
-except OSError:
+
+# On Vercel / serverless, filesystem is read-only except /tmp
+if _is_serverless or not os.access(os.path.dirname(_bundled_db) or '.', os.W_OK):
     DB_PATH = _tmp_db
+    if os.path.exists(_bundled_db) and not os.path.exists(_tmp_db):
+        try:
+            shutil.copyfile(_bundled_db, _tmp_db)
+        except Exception:
+            pass
+else:
+    try:
+        with open(_bundled_db, 'ab'):
+            pass
+        DB_PATH = _bundled_db
+    except OSError:
+        DB_PATH = _tmp_db
+        if os.path.exists(_bundled_db) and not os.path.exists(_tmp_db):
+            try:
+                shutil.copyfile(_bundled_db, _tmp_db)
+            except Exception:
+                pass
 
 def execute_supabase_sql(query):
     """Execute raw SQL directly on Supabase PostgreSQL database using Personal Access Token."""
@@ -204,9 +222,8 @@ def get_db_connection():
             conn.autocommit = False
             return UnifiedConnection(conn, 'postgresql')
         except Exception as e:
-            print(f"[PostgreSQL Connection Warning] Could not connect ({e}). Falling back to local database.")
-            sqlite_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
-            conn = sqlite3.connect(sqlite_path)
+            print(f"[PostgreSQL Connection Warning] Could not connect ({e}). Falling back to database.")
+            conn = sqlite3.connect(DB_PATH)
             conn.row_factory = sqlite3.Row
             return UnifiedConnection(conn, 'sqlite')
     else:
