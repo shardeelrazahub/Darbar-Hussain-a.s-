@@ -42,12 +42,30 @@ else:
 
 _local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
 _tmp_db   = '/tmp/database.db'
-try:
-    with open(_local_db, 'ab'):
-        pass
-    DB_PATH = _local_db
-except OSError:
-    DB_PATH = _tmp_db
+
+def _setup_db_path():
+    if os.environ.get('VERCEL'):
+        if os.path.exists(_local_db) and not os.path.exists(_tmp_db):
+            try:
+                import shutil
+                shutil.copyfile(_local_db, _tmp_db)
+            except Exception:
+                pass
+        return _tmp_db
+    try:
+        with open(_local_db, 'a+b'):
+            pass
+        return _local_db
+    except OSError:
+        if os.path.exists(_local_db) and not os.path.exists(_tmp_db):
+            try:
+                import shutil
+                shutil.copyfile(_local_db, _tmp_db)
+            except Exception:
+                pass
+        return _tmp_db
+
+DB_PATH = _setup_db_path()
 
 def execute_supabase_sql(query):
     """Execute raw SQL directly on Supabase PostgreSQL database using Personal Access Token."""
