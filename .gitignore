@@ -1,0 +1,69 @@
+# ==============================================================================
+# Git Ignore Configuration - Markazi Imam Bargah Darbar Hussain (A.S.)
+# ==============================================================================
+
+# Environment variables & secrets (CRITICAL: Do not commit secrets/tokens)
+.env
+.env.*
+env
+*.env
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Local SQLite Databases (Production uses Supabase PostgreSQL)
+*.db
+*.sqlite
+*.sqlite3
+database.db
+
+# Local uploads directory (Uploads are stored in Supabase Storage media bucket)
+uploads/*
+!uploads/.gitkeep
+
+# IDEs and Code Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs & Temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+scratch/
+
+# Archives & Distribution bundles
+*.zip
+*.tar.gz
+*.rar
+antigravity.zip
+dist/
+build/
+*.egg-info/
