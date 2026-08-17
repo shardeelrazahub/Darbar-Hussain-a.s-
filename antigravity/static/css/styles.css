@@ -1252,32 +1252,49 @@ textarea.form-control {
   position: fixed;
   bottom: 2rem;
   right: 2rem;
-  z-index: 3000;
+  z-index: 9999;
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+  max-width: 420px;
+  width: calc(100% - 2rem);
+  pointer-events: none;
 }
 
 .toast {
-  padding: 1rem 1.5rem;
+  padding: 0.9rem 1.3rem;
   border-radius: var(--radius-md);
   background: var(--primary-dark);
   color: white;
-  box-shadow: var(--shadow-lg);
-  font-weight: 600;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  font-weight: 500;
+  font-size: 0.95rem;
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  animation: slideIn 0.3s forwards;
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
 }
 
 .toast.toast-error {
-  background: var(--maroon-dark);
+  background: #7F1D1D;
   border-left: 4px solid #EF4444;
 }
 
 .toast.toast-success {
+  background: #064E3B;
   border-left: 4px solid var(--gold);
+}
+
+.toast.toast-info {
+  background: #1E3A8A;
+  border-left: 4px solid #60A5FA;
+}
+
+.toast.toast-warning {
+  background: #78350F;
+  border-left: 4px solid #F59E0B;
 }
 
 @keyframes slideIn {

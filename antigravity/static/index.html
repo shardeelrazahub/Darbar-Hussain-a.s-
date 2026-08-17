@@ -460,8 +460,12 @@
             </button>
           </div>
         </div>
+        <div style="background:#FEF3C7; border:1px solid #FDE68A; border-radius:var(--radius-sm); padding:0.7rem; margin-top:0.8rem; font-size:0.82rem; color:#92400E; line-height:1.4;">
+          <i class="ri-shield-user-line" style="vertical-align:middle; margin-right:4px;"></i>
+          <strong>Approval Notice:</strong> New accounts are submitted to the Super Administrator for review before dashboard access is granted.
+        </div>
         <button type="submit" class="btn btn-primary" id="signup-submit-btn" style="width:100%; margin-top:1rem;">
-          <i class="ri-user-add-line"></i> Create Account
+          <i class="ri-user-add-line"></i> Submit Account Application
         </button>
       </form>
 
@@ -537,7 +541,13 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- App Scripts -->
+  <script src="/static/js/toast.js"></script>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/admin-auth.js"></script>
+  <script src="/static/js/admin-dashboard.js"></script>
+  <script src="/static/js/admin-content.js"></script>
+  <script src="/static/js/admin-gallery.js"></script>
+  <script src="/static/js/admin-community.js"></script>
   <script src="/static/js/admin.js"></script>
 </body>
 </html>

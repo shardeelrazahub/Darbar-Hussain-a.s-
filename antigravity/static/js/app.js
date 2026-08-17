@@ -75,16 +75,43 @@ const i18n = {
   }
 };
 
+function handleAppRouting() {
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash;
+
+  if (path.startsWith('/dashboard') || hash === '#admin-dashboard') {
+    const parts = path.split('/').filter(Boolean);
+    const subtab = parts.length > 1 ? parts[1] : 'overview';
+    if (typeof checkAdminDashboardAuth === 'function') {
+      checkAdminDashboardAuth(subtab);
+    }
+  } else if (path === '/login' || path === '/admin' || path === '/admin/login' || hash === '#admin-login') {
+    if (typeof showAdminLogin === 'function') {
+      showAdminLogin('login', false);
+    }
+  } else if (path === '/signup' || hash === '#admin-signup') {
+    if (typeof showAdminLogin === 'function') {
+      showAdminLogin('signup', false);
+    }
+  } else {
+    if (typeof showPublicSite === 'function') {
+      showPublicSite(false);
+    }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   fetchPublicData();
   setupNavScroll();
+  handleAppRouting();
+});
 
-  // Check URL hash for admin view
-  if (window.location.hash === '#admin-login') {
-    showAdminLogin();
-  } else if (window.location.hash === '#admin-dashboard') {
-    checkAdminDashboardAuth();
-  }
+window.addEventListener('popstate', () => {
+  handleAppRouting();
+});
+
+window.addEventListener('hashchange', () => {
+  handleAppRouting();
 });
 
 async function fetchPublicData() {
@@ -244,7 +271,7 @@ function renderEvents() {
     const card = document.createElement('div');
     card.className = 'event-card';
     card.innerHTML = `
-      <img src="${item.image_url || '/static/images/hero_architecture.jpg'}" alt="${title}" class="event-card-image">
+      <img src="${item.image_url || 'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/hero_architecture.jpg'}" alt="${title}" class="event-card-image" onerror="this.onerror=null; this.src='https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/hero_architecture.jpg'">
       <div class="event-card-body">
         <div class="event-date-badge">
           <i class="ri-calendar-line"></i> ${item.event_date} ${item.start_time ? '| ' + item.start_time : ''}
@@ -341,7 +368,7 @@ function renderGallery() {
     item.className = 'gallery-item';
     item.onclick = () => openLightbox(img.image_url, caption);
     item.innerHTML = `
-      <img src="${img.image_url}" alt="${caption || 'Imam Bargah Photo'}" loading="lazy">
+      <img src="${img.image_url}" alt="${caption || 'Imam Bargah Photo'}" loading="lazy" onerror="this.onerror=null; this.src='https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/imambargah_facade.jpg'">
       <div class="gallery-overlay">
         <div class="gallery-caption"><i class="ri-search-eye-line"></i> ${caption || 'View Full Image'}</div>
       </div>
@@ -386,7 +413,7 @@ function renderMedia() {
     card.className = 'media-card';
     card.innerHTML = `
       <div class="media-thumbnail-wrap">
-        <img src="${item.thumbnail_url || '/static/images/hero_architecture.jpg'}" alt="${title}">
+        <img src="${item.thumbnail_url || 'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/hero_architecture.jpg'}" alt="${title}" onerror="this.onerror=null; this.src='https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/hero_architecture.jpg'">
         <a href="${item.media_url}" target="_blank" rel="noopener" class="play-badge" title="Watch Media">
           <i class="ri-play-fill"></i>
         </a>
@@ -560,66 +587,35 @@ function setupNavScroll() {
   });
 }
 
-function showPublicSite() {
-  window.location.hash = '';
-  document.getElementById('public-app').style.display = 'block';
-  document.getElementById('admin-login-view').style.display = 'none';
-  document.getElementById('admin-dashboard-view').style.display = 'none';
-}
-
-function showAdminLogin(defaultTab = 'login') {
-  window.location.hash = defaultTab === 'signup' ? '#admin-signup' : '#admin-login';
-  document.getElementById('public-app').style.display = 'none';
-  document.getElementById('admin-login-view').style.display = 'flex';
-  document.getElementById('admin-dashboard-view').style.display = 'none';
-  switchAuthTab(defaultTab);
-}
-
-function showAdminSignup() {
-  showAdminLogin('signup');
-}
-
-function switchAuthTab(tab) {
-  const errBox = document.getElementById('login-error-alert');
-  if (errBox) errBox.style.display = 'none';
-
-  const loginForm = document.getElementById('admin-login-form');
-  const signupForm = document.getElementById('admin-signup-form');
-  const loginBtn = document.getElementById('tab-login-btn');
-  const signupBtn = document.getElementById('tab-signup-btn');
-
-  if (tab === 'signup') {
-    if (loginForm) loginForm.style.display = 'none';
-    if (signupForm) signupForm.style.display = 'block';
-    if (loginBtn) loginBtn.classList.remove('active');
-    if (signupBtn) signupBtn.classList.add('active');
-  } else {
-    if (loginForm) loginForm.style.display = 'block';
-    if (signupForm) signupForm.style.display = 'none';
-    if (loginBtn) loginBtn.classList.add('active');
-    if (signupBtn) signupBtn.classList.remove('active');
+function showToast(msg, type = 'success', duration = 4000) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
   }
-}
-
-function togglePasswordVisibility(inputId, btn) {
-  const input = document.getElementById(inputId);
-  if (!input) return;
-  const icon = btn.querySelector('i');
-  if (input.type === 'password') {
-    input.type = 'text';
-    if (icon) icon.className = 'ri-eye-line';
-  } else {
-    input.type = 'password';
-    if (icon) icon.className = 'ri-eye-off-line';
-  }
-}
-
-function showToast(msg, type = 'success') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<i class="${type === 'success' ? 'ri-checkbox-circle-fill' : 'ri-error-warning-fill'}"></i> ${msg}`;
+
+  let iconClass = 'ri-checkbox-circle-fill';
+  if (type === 'error') iconClass = 'ri-error-warning-fill';
+  else if (type === 'info') iconClass = 'ri-information-fill';
+  else if (type === 'warning') iconClass = 'ri-alert-fill';
+
+  toast.innerHTML = `
+    <i class="${iconClass}" style="font-size:1.3rem; flex-shrink:0;"></i>
+    <span style="flex:1; line-height:1.4;">${msg}</span>
+    <button onclick="this.parentElement.remove()" style="background:none; border:none; color:currentColor; cursor:pointer; opacity:0.7; font-size:1.2rem; line-height:1; padding:0 0 0 0.5rem;" aria-label="Close">&times;</button>
+  `;
   container.appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
+
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(100%)';
+    setTimeout(() => toast.remove(), 320);
+  }, duration);
 }
+window.showToast = showToast;
+

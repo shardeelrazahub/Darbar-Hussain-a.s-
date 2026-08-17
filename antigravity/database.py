@@ -29,20 +29,49 @@ if DATABASE_URL and '[YOUR-PASSWORD]' in DATABASE_URL:
     DATABASE_URL = None
 
 if DATABASE_URL:
-    import psycopg2
-    import psycopg2.extras
-    DB_TYPE = 'postgresql'
+    try:
+        import psycopg2
+        import psycopg2.extras
+        DB_TYPE = 'postgresql'
+    except Exception:
+        import sqlite3
+        DB_TYPE = 'sqlite'
 else:
     import sqlite3
     DB_TYPE = 'sqlite'
-    _local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
-    _tmp_db   = '/tmp/database.db'
+
+_local_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'database.db')
+_tmp_db   = '/tmp/database.db'
+try:
+    with open(_local_db, 'ab'):
+        pass
+    DB_PATH = _local_db
+except OSError:
+    DB_PATH = _tmp_db
+
+def execute_supabase_sql(query):
+    """Execute raw SQL directly on Supabase PostgreSQL database using Personal Access Token."""
+    pat = os.environ.get('SUPABASE_ACCESS_TOKEN')
+    project_ref = 'lhcvcgkjktgxofmkjcsv'
+    if not pat:
+        return None
     try:
-        with open(_local_db, 'ab'):
-            pass
-        DB_PATH = _local_db
-    except OSError:
-        DB_PATH = _tmp_db
+        import requests
+        headers = {
+            'Authorization': f'Bearer {pat}',
+            'Content-Type': 'application/json'
+        }
+        r = requests.post(
+            f'https://api.supabase.com/v1/projects/{project_ref}/database/query',
+            headers=headers,
+            json={'query': query},
+            timeout=8
+        )
+        if r.status_code in (200, 201):
+            return r.json()
+    except Exception as e:
+        print(f"[Supabase SQL Sync Note] {e}")
+    return None
 
 
 # ─────────────────────────────────────────────
@@ -217,20 +246,44 @@ def init_db():
             role TEXT NOT NULL DEFAULT 'CONTENT_ADMIN',
             avatar_url TEXT DEFAULT NULL,
             is_active INTEGER NOT NULL DEFAULT 1,
+            is_verified INTEGER NOT NULL DEFAULT 1,
+            verification_code TEXT DEFAULT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDING',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     '''))
 
-    # Add avatar_url column if missing (migration for older DBs)
+    # Add columns if missing (migration for existing DBs)
     if DB_TYPE == 'sqlite':
         try:
             cursor.execute('ALTER TABLE admin_users ADD COLUMN avatar_url TEXT DEFAULT NULL')
+        except Exception:
+            pass
+        try:
+            cursor.execute('ALTER TABLE admin_users ADD COLUMN is_verified INTEGER DEFAULT 1')
+        except Exception:
+            pass
+        try:
+            cursor.execute('ALTER TABLE admin_users ADD COLUMN verification_code TEXT DEFAULT NULL')
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE admin_users ADD COLUMN status TEXT DEFAULT 'PENDING'")
         except Exception:
             pass
     else:
         try:
             cursor.execute('''
                 ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT NULL
+            ''')
+            cursor.execute('''
+                ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS is_verified INTEGER DEFAULT 1
+            ''')
+            cursor.execute('''
+                ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS verification_code TEXT DEFAULT NULL
+            ''')
+            cursor.execute('''
+                ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING'
             ''')
         except Exception:
             pass
@@ -418,13 +471,27 @@ def init_db():
 def seed_default_data(conn):
     cursor = conn.cursor()
 
-    # Super Admin
-    cursor.execute('SELECT COUNT(*) FROM admin_users')
-    if cursor.fetchone()[0] == 0:
+    # Super Admin: Keep solely alaewada43@gmail.com as SUPER_ADMIN
+    super_email = 'alaewada43@gmail.com'
+    super_pass = '@Sunny@12345@'
+    super_hash = generate_password_hash(super_pass)
+
+    # Demote any other users from SUPER_ADMIN to CONTENT_ADMIN
+    cursor.execute("UPDATE admin_users SET role = 'CONTENT_ADMIN' WHERE email != ?", (super_email,))
+
+    cursor.execute('SELECT id FROM admin_users WHERE email = ?', (super_email,))
+    existing_super = cursor.fetchone()
+    if not existing_super:
         cursor.execute('''
-            INSERT OR IGNORE INTO admin_users (email, password_hash, name, role, is_active)
-            VALUES (?, ?, ?, 'SUPER_ADMIN', 1)
-        ''', ('admin@darbelloimambargah.com', generate_password_hash('ImamHussain#2026'), 'Super Administrator'))
+            INSERT INTO admin_users (email, password_hash, name, role, is_active, is_verified, status)
+            VALUES (?, ?, 'Sunny Memon', 'SUPER_ADMIN', 1, 1, 'APPROVED')
+        ''', (super_email, super_hash))
+    else:
+        cursor.execute('''
+            UPDATE admin_users 
+            SET password_hash = ?, role = 'SUPER_ADMIN', is_active = 1, is_verified = 1, status = 'APPROVED'
+            WHERE email = ?
+        ''', (super_hash, super_email))
 
     # Website Settings
     default_settings = {
@@ -432,8 +499,9 @@ def seed_default_data(conn):
         'site_name_ur': 'مرکزی امام بارگاہ دربار امام حسین علیہ السلام',
         'site_subtitle_en': 'Darbello, Sindh, Pakistan',
         'site_subtitle_ur': 'دریبلو، سندھ، پاکستان',
-        'logo_url': 'https://scontent.fkhi16-2.fna.fbcdn.net/v/t39.30808-1/309516773_201499605612643_6793157056793264104_n.jpg?stp=dst-jpg_tt6&cstp=mx1440x1423&ctp=s200x200&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=ylQ-D55_TTQQ7kNvwFV8Tut&_nc_oc=Adp7oxN8wIl1b2IpyNbMjYpfk9wJSuXmASZapTbX21BEfe1MtCCh-L7BadSutJJ2Vgo&_nc_zt=24&_nc_ht=scontent.fkhi16-2.fna&_nc_gid=tDNaaKME3T0GBmuWWC0w6A&_nc_ss=7b2a8&oh=00_AQGXyZkbEP7ZYZEvmmK3Xi-PudwR1Ztu4vZ9mypelZEu1w&oe=6A841215',
-        'hero_image_url': 'https://scontent.fkhi16-2.fna.fbcdn.net/v/t39.30808-1/309516773_201499605612643_6793157056793264104_n.jpg?stp=dst-jpg_tt6&cstp=mx1440x1423&ctp=s200x200&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=ylQ-D55_TTQQ7kNvwFV8Tut&_nc_oc=Adp7oxN8wIl1b2IpyNbMjYpfk9wJSuXmASZapTbX21BEfe1MtCCh-L7BadSutJJ2Vgo&_nc_zt=24&_nc_ht=scontent.fkhi16-2.fna&_nc_gid=tDNaaKME3T0GBmuWWC0w6A&_nc_ss=7b2a8&oh=00_AQGXyZkbEP7ZYZEvmmK3Xi-PudwR1Ztu4vZ9mypelZEu1w&oe=6A841215',
+        'logo_url': 'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/logo.png',
+        'hero_image_url': 'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/imambargah_facade.jpg',
+        'imambargah_facade_url': 'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/imambargah_facade.jpg',
         'address_en': 'Memon Muhalla, Darbello New, Darbello, Pakistan',
         'address_ur': 'میمن محلہ، دریبلو نیو، دریبلو، پاکستان',
         'phone': '',
@@ -491,7 +559,7 @@ def seed_default_data(conn):
              'ایمان، یاد الہیٰ، روحانیت اور باہمی اتحاد کا مرکز۔',
              'Welcome to the official website of Markazi Imam Bargah Darbar Imam Hussain (A.S.), Darbello.',
              'مرکزی امام بارگاہ دربار امام حسین علیہ السلام کی سرکاری ویب سائٹ میں خوش آمدید۔',
-             'https://scontent.fkhi16-2.fna.fbcdn.net/v/t39.30808-1/309516773_201499605612643_6793157056793264104_n.jpg?stp=dst-jpg_tt6&cstp=mx1440x1423&ctp=s200x200&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=ylQ-D55_TTQQ7kNvwFV8Tut&_nc_oc=Adp7oxN8wIl1b2IpyNbMjYpfk9wJSuXmASZapTbX21BEfe1MtCCh-L7BadSutJJ2Vgo&_nc_zt=24&_nc_ht=scontent.fkhi16-2.fna&_nc_gid=tDNaaKME3T0GBmuWWC0w6A&_nc_ss=7b2a8&oh=00_AQGXyZkbEP7ZYZEvmmK3Xi-PudwR1Ztu4vZ9mypelZEu1w&oe=6A841215'),
+             'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/imambargah_facade.jpg'),
             ('about',
              'About Our Imam Bargah',
              'ہماری امام بارگاہ کے بارے میں',
@@ -499,7 +567,7 @@ def seed_default_data(conn):
              'ایمان، خدمت اور باہمی اتحاد',
              'Markazi Imam Bargah Darbar Imam Hussain (A.S.) is located in Memon Muhalla, Darbello New, Darbello, Pakistan.',
              'مرکزی امام بارگاہ دربار امام حسین علیہ السلام میمن محلہ، دریبلو نیو، دریبلو، پاکستان میں واقع ہے۔',
-             'https://scontent.fkhi16-2.fna.fbcdn.net/v/t39.30808-1/309516773_201499605612643_6793157056793264104_n.jpg?stp=dst-jpg_tt6&cstp=mx1440x1423&ctp=s200x200&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=ylQ-D55_TTQQ7kNvwFV8Tut&_nc_oc=Adp7oxN8wIl1b2IpyNbMjYpfk9wJSuXmASZapTbX21BEfe1MtCCh-L7BadSutJJ2Vgo&_nc_zt=24&_nc_ht=scontent.fkhi16-2.fna&_nc_gid=tDNaaKME3T0GBmuWWC0w6A&_nc_ss=7b2a8&oh=00_AQGXyZkbEP7ZYZEvmmK3Xi-PudwR1Ztu4vZ9mypelZEu1w&oe=6A841215'),
+             'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/hero_architecture.jpg'),
             ('community',
              'Community & Services',
              'کمیونٹی اور خدمات',
@@ -507,7 +575,7 @@ def seed_default_data(conn):
              'مؤمنین اور مقامی آبادی کی خدمت',
              'Our Imam Bargah coordinates religious services, Majalis, Niaz distribution, and community support in Darbello.',
              'ہماری امام بارگاہ دریبلو میں مذہبی خدمات، مجالس، نیاز کی تقسیم اور باہمی معاونت کا اہتمام کرتی ہے۔',
-             'https://scontent.fkhi16-2.fna.fbcdn.net/v/t39.30808-1/309516773_201499605612643_6793157056793264104_n.jpg?stp=dst-jpg_tt6&cstp=mx1440x1423&ctp=s200x200&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=2d3e12&_nc_ohc=ylQ-D55_TTQQ7kNvwFV8Tut&_nc_oc=Adp7oxN8wIl1b2IpyNbMjYpfk9wJSuXmASZapTbX21BEfe1MtCCh-L7BadSutJJ2Vgo&_nc_zt=24&_nc_ht=scontent.fkhi16-2.fna&_nc_gid=tDNaaKME3T0GBmuWWC0w6A&_nc_ss=7b2a8&oh=00_AQGXyZkbEP7ZYZEvmmK3Xi-PudwR1Ztu4vZ9mypelZEu1w&oe=6A841215'),
+             'https://lhcvcgkjktgxofmkjcsv.supabase.co/storage/v1/object/public/media/branding/imambargah_pic.jpeg'),
         ]
         for p in pages:
             cursor.execute('''
